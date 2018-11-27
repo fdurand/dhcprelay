@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/inverse-inc/packetfence/go/log"
@@ -11,20 +12,26 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"strings"
 )
 
 var dhcpServers []net.IP
 var dhcpGIAddr net.IP
 
-type DHCPHandler struct {
-	m map[string]bool
+type Interface struct {
+	Name    string
+	intNet  *net.Interface
+	Giaddr  net.IP
+	Dstaddr net.IP
 }
 
 func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.MessageType) (answer Answer) {
+	spew.Dump(h)
+
 	answer.MAC = p.CHAddr()
+	answer.srvIP = append([]byte(nil), h.Dstaddr...)
 	answer.SrcIP = h.Giaddr
 	answer.Iface = h.intNet
+
 	switch msgType {
 
 	case dhcp.Discover:
@@ -32,7 +39,7 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 		// h.m[string(p.XId())] = true
 		p2 := dhcp.NewPacket(dhcp.BootRequest)
 		p2.SetCHAddr(p.CHAddr())
-		p2.SetGIAddr(dhcpGIAddr)
+		p2.SetGIAddr(h.Giaddr)
 		p2.SetXId(p.XId())
 		p2.SetBroadcast(false)
 		for k, v := range p.ParseOptions() {
@@ -64,6 +71,7 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 		for k, v := range p.ParseOptions() {
 			p2.AddOption(k, v)
 		}
+		answer.IP = p.SIAddr()
 		answer.D = p2
 		return answer
 
@@ -75,7 +83,7 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 		p2.SetFile(p.File())
 		p2.SetCIAddr(p.CIAddr())
 		p2.SetSIAddr(p.SIAddr())
-		p2.SetGIAddr(dhcpGIAddr)
+		p2.SetGIAddr(h.Giaddr)
 		p2.SetXId(p.XId())
 		p2.SetBroadcast(false)
 		for k, v := range p.ParseOptions() {
@@ -136,7 +144,7 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 		p2.SetFile(p.File())
 		p2.SetCIAddr(p.CIAddr())
 		p2.SetSIAddr(p.SIAddr())
-		p2.SetGIAddr(dhcpGIAddr)
+		p2.SetGIAddr(h.Giaddr)
 		p2.SetXId(p.XId())
 		p2.SetBroadcast(false)
 		for k, v := range p.ParseOptions() {
@@ -153,12 +161,6 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 // 	go ListenAndServeIf(in, out, 67, handler)
 // 	ListenAndServeIf(out, in, 68, handler)
 // }
-
-type Interface struct {
-	Name   string
-	intNet *net.Interface
-	Giaddr net.IP
-}
 
 var ctx = context.Background()
 
@@ -185,50 +187,56 @@ func main() {
 			}
 		}(i)
 	}
-	// config := strings.Fields(*flagConfig)
+
 	result := strings.Split(*flagConfig, ",")
 	for i := range result {
-		spew.Dump(result)
 		interfaceConfig := strings.Split(result[i], ":")
 		iface, _ := net.InterfaceByName(interfaceConfig[0])
-		v := Interface{Name: interfaceConfig[0], intNet: iface, Giaddr: net.ParseIP(interfaceConfig[1])}
+		interfaceIP, _ := iface.Addrs()
+		var IPsrc net.IP
+		for _, ip := range interfaceIP {
+			ip := ip
+			listenIP, _, _ := net.ParseCIDR(ip.String())
+			if listenIP.To4() != nil {
+				IPsrc = listenIP
+			}
+		}
+
+		v := Interface{Name: interfaceConfig[0], intNet: iface, Dstaddr: net.ParseIP(interfaceConfig[1]), Giaddr: IPsrc}
 		spew.Dump(v)
 		go func() {
 			v.run(jobs, ctx)
 		}()
 
-		interfaceIP, _ := iface.Addrs()
+		interfaceIP, _ = iface.Addrs()
 		for _, ip := range interfaceIP {
-			go func() {
-				v.runUnicast(jobs, net.ParseIP(ip.String()), ctx)
-			}()
+			ip := ip
+			listenIP, _, _ := net.ParseCIDR(ip.String())
+			if listenIP.To4() != nil {
+				go func() {
+					spew.Dump(listenIP)
+					v.runUnicast(jobs, listenIP, ctx)
+				}()
+			}
 		}
 	}
 
-	// servers := strings.Fields(*flagServers)
-	// for _, s := range servers {
-	// 	dhcpServers = append(dhcpServers, net.ParseIP(s))
-	// }
-	// dhcpGIAddr = net.ParseIP(*flagBindIP)
-	// if dhcpGIAddr == nil {
-	// 	panic("giaddr needed")
-	// }
-	// createRelay(*flagInInt, *flagOutInt)
-	http.ListenAndServe("localhost:6060", nil)
+	http.ListenAndServe("localhost:6061", nil)
+
 }
 
 // Broadcast Listener
-func (h *Interface) run(jobs chan job, ctx context.Context) {
+func (v *Interface) run(jobs chan job, ctx context.Context) {
 
 	// handler := &DHCPHandler{m: make(map[string]bool)}
 	// go ListenAndServeIf(in, out, 67, handler)
 	// ListenAndServeIf(out, in, 68, handler)
 
-	ListenAndServeIf(h.Name, h, jobs, ctx)
+	ListenAndServeIf(v.Name, v, jobs, ctx)
 }
 
 // Unicast listener
-func (h *Interface) runUnicast(jobs chan job, ip net.IP, ctx context.Context) {
+func (v *Interface) runUnicast(jobs chan job, ip net.IP, ctx context.Context) {
 
-	ListenAndServeIfUnicast(h.Name, h, jobs, ip, ctx)
+	ListenAndServeIfUnicast(v.Name, v, jobs, ip, ctx)
 }

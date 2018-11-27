@@ -7,10 +7,10 @@ import (
 	"log"
 	"net"
 	"os"
-	"strconv"
 
 	"syscall"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/raw"
 )
@@ -206,31 +206,19 @@ func (h *iphdr) checksum() {
 // sendUnicastDHCP create a udp packet and stores it in an
 // Ethernet frame, and sends the frame over a raw socket to attempt to wake
 // a machine.
-func sendUnicastDHCP(dhcp []byte, dstIP net.Addr, srcIP net.IP, giAddr net.IP, Local bool) error {
+func sendUnicastDHCP(dhcp []byte, dstIP net.IP, srcIP net.IP, srcPort int, dstPort int) error {
 
 	s, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_RAW)
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	spew.Dump(dstIP)
+	spew.Dump(srcIP)
 	proto := 17
-	var port int
-	ipStr, portStr, _ := net.SplitHostPort(dstIP.String())
-	if Local {
-		port, _ = strconv.Atoi(portStr)
-	} else {
-		port = int(67)
-	}
-	// Keep as is for futur test
-	if !(net.ParseIP(ipStr).Equal(giAddr)) {
-		if !(giAddr.Equal(net.IPv4zero)) {
-			ipStr = giAddr.String()
-		}
-	}
 
-	udpsrc := uint(67)
+	udpsrc := srcPort
 
-	udpdst := port
+	udpdst := dstPort
 
 	udp := udphdr{
 		src: uint16(udpsrc),
@@ -248,7 +236,7 @@ func sendUnicastDHCP(dhcp []byte, dstIP net.Addr, srcIP net.IP, giAddr net.IP, L
 		proto: uint8(proto),
 	}
 	copy(ip.src[:], srcIP.To4())
-	copy(ip.dst[:], net.ParseIP(ipStr).To4())
+	copy(ip.dst[:], dstIP.To4())
 
 	udp.ulen = uint16(udplen)
 	udp.checksum(&ip, dhcp)
@@ -277,7 +265,7 @@ func sendUnicastDHCP(dhcp []byte, dstIP net.Addr, srcIP net.IP, giAddr net.IP, L
 	packet := append(ipHeader, dataWithHeader...)
 
 	addr := syscall.SockaddrInet4{}
-	copy(addr.Addr[:], net.ParseIP(ipStr).To4())
+	copy(addr.Addr[:], dstIP.To4())
 	addr.Port = int(udpdst)
 
 	err = syscall.Sendto(s, packet, 0, &addr)

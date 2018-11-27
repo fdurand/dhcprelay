@@ -14,7 +14,7 @@ type Answer struct {
 	MAC   net.HardwareAddr
 	Iface *net.Interface
 	SrcIP net.IP
-	Local bool
+	srvIP net.IP
 }
 
 type Handler interface {

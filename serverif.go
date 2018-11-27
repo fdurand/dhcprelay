@@ -112,7 +112,7 @@ func ListenAndServeIfUnicast(interfaceName string, handler Handler, jobs chan jo
 		return err
 	}
 
-	p, err := UnicastOpen(ip, 67, interfaceName)
+	p, err := UnicastOpen(ip, 68, interfaceName)
 	if err != nil {
 		return err
 	}

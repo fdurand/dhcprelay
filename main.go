@@ -203,7 +203,6 @@ func main() {
 				v.runUnicast(jobs, net.ParseIP(ip.String()), ctx)
 			}()
 		}
-		http.ListenAndServe("localhost:6060", nil)
 	}
 
 	// servers := strings.Fields(*flagServers)
@@ -215,6 +214,7 @@ func main() {
 	// 	panic("giaddr needed")
 	// }
 	// createRelay(*flagInInt, *flagOutInt)
+	http.ListenAndServe("localhost:6060", nil)
 }
 
 // Broadcast Listener

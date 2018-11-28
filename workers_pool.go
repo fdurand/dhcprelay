@@ -31,7 +31,7 @@ func doWork(id int, jobe job) {
 			client.sendDHCP(ans.MAC, ans.D, ans.IP, ans.SrcIP)
 			client.Close()
 		case dhcp.Request:
-			sendUnicastDHCP(ans.D, ans.IP, ans.SrcIP, 68, 67)
+			sendUnicastDHCP(ans.D, ans.srvIP, ans.SrcIP, 68, 67)
 		case dhcp.ACK:
 			client, _ := NewRawClient(ans.Iface)
 			client.sendDHCP(ans.MAC, ans.D, ans.IP, ans.SrcIP)

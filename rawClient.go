@@ -10,6 +10,7 @@ import (
 
 	"syscall"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/raw"
 )
@@ -211,7 +212,8 @@ func sendUnicastDHCP(dhcp []byte, dstIP net.IP, srcIP net.IP, srcPort int, dstPo
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	spew.Dump(dstIP)
+	spew.Dump(srcIP)
 	proto := 17
 
 	udpsrc := srcPort

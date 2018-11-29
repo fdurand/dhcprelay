@@ -49,6 +49,9 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 		return answer
 
 	case dhcp.Offer:
+		// if !h.m[string(p.XId())] {
+		// 	return nil
+		// }
 		var sip net.IP
 		for k, v := range p.ParseOptions() {
 			if k == dhcp.OptionServerIdentifier {
@@ -73,6 +76,7 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 		return answer
 
 	case dhcp.Request:
+		// h.m[string(p.XId())] = true
 		fmt.Println("request ", p.YIAddr(), "from", p.CHAddr())
 		p2 := dhcp.NewPacket(dhcp.BootRequest)
 		p2.SetCHAddr(p.CHAddr())
@@ -89,6 +93,9 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 		return answer
 
 	case dhcp.ACK:
+		// if !h.m[string(p.XId())] {
+		// 	return nil
+		// }
 		var sip net.IP
 		for k, v := range p.ParseOptions() {
 			if k == dhcp.OptionServerIdentifier {
@@ -112,6 +119,9 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 		return answer
 
 	case dhcp.NAK:
+		// if !h.m[string(p.XId())] {
+		// 	return nil
+		// }
 		fmt.Println("NAK from", p.SIAddr(), p.YIAddr(), "to", p.CHAddr())
 		p2 := dhcp.NewPacket(dhcp.BootReply)
 		p2.SetXId(p.XId())
@@ -145,6 +155,12 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 	}
 	return answer
 }
+
+// func createRelay(in, out string) {
+// 	handler := &DHCPHandler{m: make(map[string]bool)}
+// 	go ListenAndServeIf(in, out, 67, handler)
+// 	ListenAndServeIf(out, in, 68, handler)
+// }
 
 var ctx = context.Background()
 
@@ -187,6 +203,7 @@ func main() {
 		}
 
 		v := Interface{Name: interfaceConfig[0], intNet: iface, Dstaddr: net.ParseIP(interfaceConfig[1]), Giaddr: IPsrc}
+		spew.Dump(v)
 		go func() {
 			v.run(jobs, ctx)
 		}()
@@ -197,6 +214,7 @@ func main() {
 			listenIP, _, _ := net.ParseCIDR(ip.String())
 			if listenIP.To4() != nil {
 				go func() {
+					spew.Dump(listenIP)
 					v.runUnicast(jobs, listenIP, ctx)
 				}()
 			}
@@ -209,6 +227,10 @@ func main() {
 
 // Broadcast Listener
 func (v *Interface) run(jobs chan job, ctx context.Context) {
+
+	// handler := &DHCPHandler{m: make(map[string]bool)}
+	// go ListenAndServeIf(in, out, 67, handler)
+	// ListenAndServeIf(out, in, 68, handler)
 
 	ListenAndServeIf(v.Name, v, jobs, ctx)
 }

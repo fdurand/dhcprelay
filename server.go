@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 
+	"github.com/davecgh/go-spew/spew"
 	dhcp "github.com/krolaw/dhcp4"
 	"golang.org/x/net/ipv4"
 )
@@ -58,7 +59,7 @@ func Serve(conn ServeConn, handler Handler, jobs chan job, ctx context.Context) 
 		}
 
 		req := dhcp.Packet(buffer[:n])
-
+		spew.Dump(req)
 		if req.HLen() > 16 { // Invalid size
 			continue
 		}
@@ -82,3 +83,4 @@ func Serve(conn ServeConn, handler Handler, jobs chan job, ctx context.Context) 
 
 	}
 }
+

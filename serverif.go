@@ -130,6 +130,10 @@ func UnicastOpen(bindAddr net.IP, port int, ifname string) (*ipv4.PacketConn, er
 		log.Fatal(err)
 	}
 
+	// if err = syscall.SetsockoptString(s, syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, ifname); err != nil {
+	// 	log.Fatal(err)
+	// }
+
 	lsa := syscall.SockaddrInet4{Port: port}
 	copy(lsa.Addr[:], bindAddr.To4())
 
@@ -147,3 +151,4 @@ func UnicastOpen(bindAddr net.IP, port int, ifname string) (*ipv4.PacketConn, er
 
 	return p, nil
 }
+

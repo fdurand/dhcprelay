@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net"
 	"os"
 	"syscall"
@@ -71,18 +70,20 @@ func ListenAndServeIf(interfaceName string, handler Handler, jobs chan job, ctx 
 func broadcastOpen(bindAddr net.IP, port int, ifname string) (*ipv4.PacketConn, error) {
 	s, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_UDP)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	if err = syscall.SetsockoptInt(s, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); err != nil {
-		log.Fatal(err)
+		syscall.Close(s)
+		return nil, err
 	}
 
 	if err = syscall.SetsockoptInt(s, syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1); err != nil {
-		log.Fatal(err)
+		syscall.Close(s)
+		return nil, err
 	}
-	// syscall.SetsockoptInt(s, syscall.SOL_SOCKET, syscall.SO_REUSEPORT, 1)
 	if err = syscall.SetsockoptString(s, syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, ifname); err != nil {
-		log.Fatal(err)
+		syscall.Close(s)
+		return nil, err
 	}
 
 	lsa := syscall.SockaddrInet4{Port: port}
@@ -90,13 +91,13 @@ func broadcastOpen(bindAddr net.IP, port int, ifname string) (*ipv4.PacketConn, 
 
 	if err = syscall.Bind(s, &lsa); err != nil {
 		syscall.Close(s)
-		log.Fatal(err)
+		return nil, err
 	}
 	f := os.NewFile(uintptr(s), "")
 	c, err := net.FilePacketConn(f)
 	f.Close()
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	p := ipv4.NewPacketConn(c)
 
@@ -124,28 +125,25 @@ func ListenAndServeIfUnicast(interfaceName string, handler Handler, jobs chan jo
 func UnicastOpen(bindAddr net.IP, port int, ifname string) (*ipv4.PacketConn, error) {
 	s, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_UDP)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	if err = syscall.SetsockoptInt(s, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); err != nil {
-		log.Fatal(err)
+		syscall.Close(s)
+		return nil, err
 	}
-
-	// if err = syscall.SetsockoptString(s, syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, ifname); err != nil {
-	// 	log.Fatal(err)
-	// }
 
 	lsa := syscall.SockaddrInet4{Port: port}
 	copy(lsa.Addr[:], bindAddr.To4())
 
 	if err = syscall.Bind(s, &lsa); err != nil {
 		syscall.Close(s)
-		log.Fatal(err)
+		return nil, err
 	}
 	f := os.NewFile(uintptr(s), "")
 	c, err := net.FilePacketConn(f)
 	f.Close()
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	p := ipv4.NewPacketConn(c)
 

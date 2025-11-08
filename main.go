@@ -2,20 +2,14 @@ package main
 
 import (
 	"context"
+	"flag"
+	"log"
+	"net"
 	"net/http"
 	"strings"
 
-	"github.com/davecgh/go-spew/spew"
-	"github.com/inverse-inc/packetfence/go/log"
 	dhcp "github.com/krolaw/dhcp4"
-
-	"flag"
-	"fmt"
-	"net"
 )
-
-var dhcpServers []net.IP
-var dhcpGIAddr net.IP
 
 type Interface struct {
 	Name    string
@@ -25,8 +19,6 @@ type Interface struct {
 }
 
 func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.MessageType) (answer Answer) {
-	spew.Dump(h)
-
 	answer.MAC = p.CHAddr()
 	answer.srvIP = append([]byte(nil), h.Dstaddr...)
 	answer.SrcIP = h.Giaddr
@@ -35,7 +27,7 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 	switch msgType {
 
 	case dhcp.Discover:
-		fmt.Println("discover ", p.YIAddr(), "from", p.CHAddr())
+		log.Println("discover ", p.YIAddr(), "from", p.CHAddr())
 		// h.m[string(p.XId())] = true
 		p2 := dhcp.NewPacket(dhcp.BootRequest)
 		p2.SetCHAddr(p.CHAddr())
@@ -58,7 +50,7 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 				sip = v
 			}
 		}
-		fmt.Println("offering from", sip.String(), p.YIAddr(), "to", p.CHAddr())
+		log.Println("offering from", sip.String(), p.YIAddr(), "to", p.CHAddr())
 		p2 := dhcp.NewPacket(dhcp.BootReply)
 		p2.SetXId(p.XId())
 		p2.SetFile(p.File())
@@ -76,8 +68,7 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 		return answer
 
 	case dhcp.Request:
-		// h.m[string(p.XId())] = true
-		fmt.Println("request ", p.YIAddr(), "from", p.CHAddr())
+		log.Println("request ", p.YIAddr(), "from", p.CHAddr())
 		p2 := dhcp.NewPacket(dhcp.BootRequest)
 		p2.SetCHAddr(p.CHAddr())
 		p2.SetFile(p.File())
@@ -102,7 +93,7 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 				sip = v
 			}
 		}
-		fmt.Println("ACK from", sip.String(), p.YIAddr(), "to", p.CHAddr())
+		log.Println("ACK from", sip.String(), p.YIAddr(), "to", p.CHAddr())
 		p2 := dhcp.NewPacket(dhcp.BootReply)
 		p2.SetXId(p.XId())
 		p2.SetFile(p.File())
@@ -122,7 +113,7 @@ func (h *Interface) ServeDHCP(ctx context.Context, p dhcp.Packet, msgType dhcp.M
 		// if !h.m[string(p.XId())] {
 		// 	return nil
 		// }
-		fmt.Println("NAK from", p.SIAddr(), p.YIAddr(), "to", p.CHAddr())
+		log.Println("NAK from", p.SIAddr(), p.YIAddr(), "to", p.CHAddr())
 		p2 := dhcp.NewPacket(dhcp.BootReply)
 		p2.SetXId(p.XId())
 		p2.SetFile(p.File())
@@ -168,8 +159,6 @@ func main() {
 	flagConfig := flag.String("config", "interface:giaddr,interface2:giaddr", "Couple of interface and giaddr, like eth1:192.168.0.1,eth2:192.168.2.1")
 	flag.Parse()
 
-	ctx = log.LoggerNewContext(ctx)
-
 	// Queue value
 	var (
 		maxQueueSize = 100
@@ -191,32 +180,43 @@ func main() {
 	result := strings.Split(*flagConfig, ",")
 	for i := range result {
 		interfaceConfig := strings.Split(result[i], ":")
-		iface, _ := net.InterfaceByName(interfaceConfig[0])
-		interfaceIP, _ := iface.Addrs()
+		iface, err := net.InterfaceByName(interfaceConfig[0])
+		if err != nil {
+			log.Fatalf("Failed to get interface %s: %v", interfaceConfig[0], err)
+		}
+		interfaceIP, err := iface.Addrs()
+		if err != nil {
+			log.Fatalf("Failed to get addresses for interface %s: %v", interfaceConfig[0], err)
+		}
 		var IPsrc net.IP
 		for _, ip := range interfaceIP {
-			ip := ip
-			listenIP, _, _ := net.ParseCIDR(ip.String())
+			listenIP, _, err := net.ParseCIDR(ip.String())
+			if err != nil {
+				continue
+			}
 			if listenIP.To4() != nil {
 				IPsrc = listenIP
 			}
 		}
 
 		v := Interface{Name: interfaceConfig[0], intNet: iface, Dstaddr: net.ParseIP(interfaceConfig[1]), Giaddr: IPsrc}
-		spew.Dump(v)
 		go func() {
 			v.run(jobs, ctx)
 		}()
 
-		interfaceIP, _ = iface.Addrs()
+		interfaceIP, err = iface.Addrs()
+		if err != nil {
+			log.Fatalf("Failed to get addresses for interface %s: %v", interfaceConfig[0], err)
+		}
 		for _, ip := range interfaceIP {
-			ip := ip
-			listenIP, _, _ := net.ParseCIDR(ip.String())
+			listenIP, _, err := net.ParseCIDR(ip.String())
+			if err != nil {
+				continue
+			}
 			if listenIP.To4() != nil {
-				go func() {
-					spew.Dump(listenIP)
-					v.runUnicast(jobs, listenIP, ctx)
-				}()
+				go func(ip net.IP) {
+					v.runUnicast(jobs, ip, ctx)
+				}(listenIP)
 			}
 		}
 	}

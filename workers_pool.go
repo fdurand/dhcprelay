@@ -27,15 +27,19 @@ func doWork(id int, jobe job) {
 		case dhcp.Discover:
 			sendUnicastDHCP(ans.D, ans.srvIP, ans.SrcIP, 68, 67)
 		case dhcp.Offer:
-			client, _ := NewRawClient(ans.Iface)
-			client.sendDHCP(ans.MAC, ans.D, ans.IP, ans.SrcIP)
-			client.Close()
+			client, err := NewRawClient(ans.Iface)
+			if err == nil {
+				client.sendDHCP(ans.MAC, ans.D, ans.IP, ans.SrcIP)
+				client.Close()
+			}
 		case dhcp.Request:
 			sendUnicastDHCP(ans.D, ans.srvIP, ans.SrcIP, 68, 67)
 		case dhcp.ACK:
-			client, _ := NewRawClient(ans.Iface)
-			client.sendDHCP(ans.MAC, ans.D, ans.IP, ans.SrcIP)
-			client.Close()
+			client, err := NewRawClient(ans.Iface)
+			if err == nil {
+				client.sendDHCP(ans.MAC, ans.D, ans.IP, ans.SrcIP)
+				client.Close()
+			}
 		}
 	}
 }

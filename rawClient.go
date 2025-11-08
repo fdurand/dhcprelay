@@ -3,19 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
-	"log"
 	"net"
-	"os"
-
 	"syscall"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/mdlayher/ethernet"
 	"github.com/mdlayher/raw"
 )
-
-const UDP_HEADER_LEN = 8
 
 // A RawClient is a Wake-on-LAN client which operates directly on top of
 // Ethernet frames using raw sockets.  It can be used to send WoL magic packets
@@ -119,7 +112,7 @@ func (c *RawClient) sendDHCP(target net.HardwareAddr, dhcp []byte, dstIP net.IP,
 	buf := bytes.NewBuffer([]byte{})
 	err := binary.Write(buf, binary.BigEndian, &udp)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	udpHeader := buf.Bytes()
@@ -128,7 +121,7 @@ func (c *RawClient) sendDHCP(target net.HardwareAddr, dhcp []byte, dstIP net.IP,
 	buff := bytes.NewBuffer([]byte{})
 	err = binary.Write(buff, binary.BigEndian, &ip)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	ipHeader := buff.Bytes()
@@ -210,10 +203,10 @@ func sendUnicastDHCP(dhcp []byte, dstIP net.IP, srcIP net.IP, srcPort int, dstPo
 
 	s, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_RAW)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	spew.Dump(dstIP)
-	spew.Dump(srcIP)
+	defer syscall.Close(s)
+
 	proto := 17
 
 	udpsrc := srcPort
@@ -249,7 +242,7 @@ func sendUnicastDHCP(dhcp []byte, dstIP net.IP, srcIP net.IP, srcPort int, dstPo
 	buf := bytes.NewBuffer([]byte{})
 	err = binary.Write(buf, binary.BigEndian, &udp)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	udpHeader := buf.Bytes()
@@ -258,7 +251,7 @@ func sendUnicastDHCP(dhcp []byte, dstIP net.IP, srcIP net.IP, srcPort int, dstPo
 	buff := bytes.NewBuffer([]byte{})
 	err = binary.Write(buff, binary.BigEndian, &ip)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	ipHeader := buff.Bytes()
@@ -268,12 +261,5 @@ func sendUnicastDHCP(dhcp []byte, dstIP net.IP, srcIP net.IP, srcPort int, dstPo
 	copy(addr.Addr[:], dstIP.To4())
 	addr.Port = int(udpdst)
 
-	err = syscall.Sendto(s, packet, 0, &addr)
-	// Send packet to target
-	err = syscall.Close(s)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error closing the socket: %v\n", err)
-		os.Exit(1)
-	}
-	return err
+	return syscall.Sendto(s, packet, 0, &addr)
 }
